@@ -1,6 +1,6 @@
 # Base de donnees - ne jamais commiter
+**/database/*.db
 database/solofin.db
-database/*.db
 
 # Variables d'environnement - secrets
 .env
