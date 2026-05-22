@@ -1,2 +1,32 @@
-/* Import Tailwind CSS v4 */
 @import "tailwindcss";
+
+/* Variables couleurs SoloFin — inspirées de la maquette */
+:root {
+  --navy:   #1b3a6b;
+  --navy2:  #122b54;
+  --navy3:  #0d1f3d;
+  --orange: #ff6600;
+  --orange2:#e65c00;
+  --bg:     #f5f6f8;
+  --bd:     #e8eaed;
+  --t:      #2d3748;
+  --t2:     #64748b;
+  --mu:     #94a3b8;
+  --gr:     #16a34a;
+  --re:     #dc2626;
+  --am:     #d97706;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: 'Source Sans 3', 'Lato', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--t);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Titres en Lato */
+h1, h2, h3, .font-lato {
+  font-family: 'Lato', sans-serif;
+}
