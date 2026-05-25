@@ -64,7 +64,7 @@ export default function Login({ onLoginSuccess }) {
                 onChange={e => setEmail(e.target.value)}
                 required
                 autoFocus
-                placeholder="admin@solofin.local"
+                placeholder="r.aachboun@gmail.com"
                 style={{
                   width:'100%',border:'1.5px solid var(--bd)',borderRadius:6,
                   padding:'11px 12px',fontSize:'.93rem',fontFamily:'inherit',

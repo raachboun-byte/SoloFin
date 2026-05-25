@@ -11,7 +11,8 @@ export default defineConfig({
   server: {
     // Proxy les appels /api vers le backend Express (port 3001)
     proxy: {
-      '/api': 'http://localhost:3001',
+      '/api':     'http://localhost:3001',
+      '/uploads': 'http://localhost:3001',
     },
   },
 })

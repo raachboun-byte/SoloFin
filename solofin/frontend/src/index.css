@@ -30,3 +30,5 @@ body {
 h1, h2, h3, .font-lato {
   font-family: 'Lato', sans-serif;
 }
+
+/* (layout responsive géré par React — voir Dashboard.jsx) */

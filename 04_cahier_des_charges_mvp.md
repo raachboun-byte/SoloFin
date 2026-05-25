@@ -1,318 +1,289 @@
-# Cahier des Charges — MVP SoloFin
-
-> *Document de référence pour la phase de réalisation MVP. Toute évolution de périmètre nécessite une Change Request validée.*
-> *Dernière mise à jour : Mai 2026*
+# Cahier des Charges — SoloFin MVP
+**Document MOA | Version 2.0 | 24 mai 2026**
+**Statut : ✅ VALIDÉ — Rachid Aachboun — 24/05/2026**
+**Remplace :** CDC MVP v1.0 (périmètre saisie manuelle uniquement)
 
 ---
 
-## 1. Contexte et objectif du MVP
+## 1. Présentation du projet
 
-### 1.1 Rappel du projet
+### 1.1 Contexte
 
-SoloFin est une application web personnelle de gestion financière développée par et pour un freelance IT en SARL, avec l'aide de Claude (IA) comme développeur. Elle remplace un ensemble d'outils disparates (Excel, PDF manuels, boîte mail).
+Rachid Aachboun est consultant IT indépendant, gérant de TNS Consulting SARL (SIRET : 809 419 468 00016, TVA : FR89 809419468). Il émet une facture par mois à son client, enregistre ses dépenses professionnelles et doit suivre sa trésorerie.
+
+La gestion financière actuelle est fragmentée : tickets en vrac, factures reçues par email, relevés dans Google Drive, saisies manuelles laborieuses. L'objectif est de centraliser et automatiser.
 
 ### 1.2 Objectif du MVP
 
-Disposer d'un outil fonctionnel utilisé en conditions réelles, couvrant le cycle minimal de facturation et de suivi financier d'une activité freelance IT.
+Livrer un **assistant financier personnel automatisé** qui capture les justificatifs depuis toutes les sources (photo, upload, Gmail, Drive), extrait les données par OCR, et produit une vue consolidée des dépenses, factures et trésorerie.
 
-**Critère de succès MVP :** Utilisé 3 fois par semaine sans y être forcé pendant 30 jours consécutifs.
+### 1.3 Critère de succès
 
-### 1.3 Profil utilisateur unique
+> L'outil est utilisé 3 fois par semaine sans y être forcé, pendant 30 jours consécutifs.
 
-| Champ | Détail |
+### 1.4 Contraintes générales
+
+- Usage strictement personnel (1 utilisateur)
+- Support : Chrome dernière version, laptop + smartphone
+- Hébergement : VPS Ubuntu 22.04 LTS
+- Budget MVP : < 800 € (dans l'enveloppe globale de 1 500 € sur 6 mois)
+- Délai : 10 semaines
+
+---
+
+## 2. Périmètre MVP — 7 fonctionnalités
+
+### F01 — Authentification
+
+**Objectif :** Sécuriser l'accès à l'application et connecter les services Google.
+
+**Exigences fonctionnelles :**
+
+- EF01.1 — Login local par email + mot de passe (hashé bcrypt, cookie httpOnly)
+- EF01.2 — Connexion Google OAuth 2.0 pour autoriser l'accès à Gmail et Drive en lecture seule
+- EF01.3 — Les tokens Google sont stockés côté serveur, jamais exposés au frontend
+- EF01.4 — Déconnexion (session locale + révocation token Google)
+- EF01.5 — Redirection automatique vers login si session expirée
+
+**Règles métier :**
+- L'accès à F04 (Gmail) et F05 (Drive) est conditionné à la connexion Google OAuth
+- Les scopes demandés sont strictement limités à `gmail.readonly` et `drive.readonly`
+
+**Hors scope F01 :** Création de compte, réinitialisation de mot de passe, 2FA
+
+---
+
+### F02 — Notes de frais avec OCR
+
+**Objectif :** Capturer et enregistrer les dépenses professionnelles avec extraction automatique des données.
+
+**Exigences fonctionnelles :**
+
+- EF02.1 — Upload d'un fichier depuis desktop (formats acceptés : JPG, PNG, PDF, max 10 Mo)
+- EF02.2 — Prise de photo depuis smartphone (accès caméra via interface mobile responsive)
+- EF02.3 — Extraction automatique OCR des champs suivants :
+  - Montant TTC
+  - Date de la dépense
+  - Nom du fournisseur / émetteur
+  - Catégorie suggérée (voir liste ci-dessous)
+- EF02.4 — Présentation d'un formulaire pré-rempli avec les données extraites, modifiable avant enregistrement
+- EF02.5 — **Aucun enregistrement automatique** : la validation manuelle est obligatoire
+- EF02.6 — Champs du formulaire de dépense :
+  - Montant (€, requis)
+  - Date (requis)
+  - Fournisseur (requis)
+  - Catégorie (liste déroulante, requis)
+  - Description libre (optionnel)
+  - Justificatif attaché (fichier ou photo, stocké côté serveur)
+- EF02.7 — Catégories disponibles : Repas, Transport, Hébergement, Télécom, Matériel, Carburant, Autre
+- EF02.8 — Liste des dépenses avec filtres par mois et par catégorie
+- EF02.9 — Modification et suppression d'une dépense existante
+
+**Règles métier :**
+- Si l'OCR échoue ou ne trouve pas un champ, le champ reste vide (pas de valeur inventée)
+- Le justificatif original (image ou PDF) est conservé et consultable depuis la liste
+
+**Hors scope F02 :** Remboursement de notes de frais, workflow de validation, OCR multi-pages avancé
+
+---
+
+### F03 — Facturation (émission)
+
+**Objectif :** Créer et gérer les factures émises par TNS Consulting SARL.
+
+**Exigences fonctionnelles :**
+
+- EF03.1 — Création d'une facture avec les champs :
+  - Numéro auto-généré (format : `TNS_CONSULTING-AAAA-MM`)
+  - Date d'émission
+  - Client (pré-rempli : données TNS Consulting SARL)
+  - Désignation de la prestation
+  - Nombre de jours et TJM (calcul automatique du montant HT)
+  - TVA 20% (calcul automatique)
+  - Montant TTC
+  - Date d'échéance (30 jours par défaut)
+- EF03.2 — Génération d'un PDF de la facture (format A4, mise en page professionnelle)
+- EF03.3 — Le PDF intègre les mentions légales obligatoires (SIRET, TVA intracommunautaire, pénalités de retard)
+- EF03.4 — Suivi du statut de chaque facture :
+  - `Brouillon` → `Envoyée` → `Payée`
+  - `En retard` (passage automatique si date d'échéance dépassée et statut = Envoyée)
+- EF03.5 — Téléchargement du PDF depuis l'interface
+- EF03.6 — Liste des factures avec filtres par statut et par année
+- EF03.7 — Modification possible uniquement si statut = Brouillon
+- EF03.8 — Suppression possible uniquement si statut = Brouillon
+
+**Règles métier :**
+- Une seule facture par mois (numérotation unique `AAAA-MM`)
+- Le passage en statut `En retard` est déclenché automatiquement à minuit si échéance dépassée
+- Format PDF MVP : PDF simple (PDFKit). Migration Factur-X planifiée en V1 (obligation légale sept. 2027)
+
+**Hors scope F03 :** Envoi par email depuis l'app, relances automatiques, avoir / note de crédit, multi-clients actifs
+
+---
+
+### F04 — Import automatique depuis Gmail
+
+**Objectif :** Détecter et importer les factures reçues par email comme dépenses.
+
+**Exigences fonctionnelles :**
+
+- EF04.1 — Accès Gmail en lecture seule via OAuth (`gmail.readonly`)
+- EF04.2 — Scan des emails des 30 derniers jours par défaut (paramétrable)
+- EF04.3 — Détection des emails contenant des factures (pièces jointes PDF avec mots-clés : facture, invoice, reçu, receipt)
+- EF04.4 — Extraction OCR des pièces jointes PDF détectées :
+  - Montant
+  - Date
+  - Émetteur
+- EF04.5 — Présentation de la liste des factures détectées avec prévisualisation
+- EF04.6 — Sélection manuelle des factures à importer (case à cocher)
+- EF04.7 — **Aucun import automatique** : confirmation obligatoire avant enregistrement dans les dépenses
+- EF04.8 — Historique des imports Gmail (date de scan, nombre de factures détectées / importées)
+- EF04.9 — Indicateur visuel des emails déjà importés (pour éviter les doublons)
+
+**Règles métier :**
+- Un email déjà importé ne peut pas être importé une seconde fois (contrôle sur l'ID de l'email Gmail)
+- Les emails personnels non professionnels ne sont pas filtrés automatiquement — c'est l'utilisateur qui choisit
+
+**Hors scope F04 :** Scan automatique périodique (V2), envoi d'emails depuis l'app, accès aux emails non lus uniquement
+
+---
+
+### F05 — Import depuis Google Drive
+
+**Objectif :** Lire et importer les relevés bancaires et documents financiers stockés sur Drive.
+
+**Exigences fonctionnelles :**
+
+- EF05.1 — Accès Drive en lecture seule via OAuth (`drive.readonly`)
+- EF05.2 — Navigation dans l'arborescence Drive de l'utilisateur depuis l'interface
+- EF05.3 — Import de relevés bancaires PDF :
+  - Extraction des lignes de transactions (date, libellé, montant débit/crédit)
+  - Présentation sous forme de tableau avant import
+  - Validation ligne par ligne avant enregistrement dans la trésorerie
+- EF05.4 — Import de déclarations de résultat PDF :
+  - Extraction et affichage structuré des données clés
+  - Stockage du document dans l'application pour consultation
+- EF05.5 — Prévisualisation du document Drive avant import
+- EF05.6 — Historique des documents importés depuis Drive
+
+**Règles métier :**
+- Le parsing de relevés bancaires est semi-automatique : l'utilisateur valide chaque transaction avant enregistrement
+- En cas d'échec de parsing (format bancaire non reconnu), le document est stocké en consultation uniquement, sans extraction
+
+**Hors scope F05 :** Écriture sur Drive, suppression de fichiers Drive, synchronisation automatique (V2)
+
+---
+
+### F06 — Trésorerie
+
+**Objectif :** Visualiser les flux financiers mensuels (entrées et sorties).
+
+**Exigences fonctionnelles :**
+
+- EF06.1 — Vue mensuelle avec :
+  - Total des entrées (factures au statut Payée)
+  - Total des sorties (dépenses enregistrées)
+  - Solde net du mois
+- EF06.2 — Sélecteur de mois (navigation mois par mois)
+- EF06.3 — Historique sur 12 mois glissants
+- EF06.4 — Graphique en barres : entrées vs sorties par mois (12 mois)
+- EF06.5 — Détail des mouvements du mois sélectionné (liste des dépenses + factures)
+
+**Règles métier :**
+- Une facture n'apparaît en "entrée" que si son statut est `Payée`
+- Les factures `Envoyée` ou `En retard` apparaissent dans un encadré séparé "À encaisser"
+
+**Hors scope F06 :** Prévisionnel, rapprochement bancaire automatique (V1), export (V1)
+
+---
+
+### F07 — Interface générale et Dashboard
+
+**Objectif :** Fournir une interface claire, rapide et utilisable sur laptop et smartphone.
+
+**Exigences fonctionnelles :**
+
+- EF07.1 — Dashboard avec résumé du mois en cours :
+  - Chiffre d'affaires encaissé
+  - Total des dépenses
+  - Solde net
+  - Factures en attente de paiement
+  - Dernières dépenses enregistrées (5 dernières)
+- EF07.2 — Navigation principale : Dashboard / Notes de frais / Facturation / Trésorerie / Paramètres
+- EF07.3 — Interface responsive : fonctionne sur Chrome desktop (1920×1080) et smartphone (375px minimum)
+- EF07.4 — Temps de chargement des pages < 2 secondes
+- EF07.5 — Zéro erreur dans la console Chrome en usage normal
+- EF07.6 — Page Paramètres : affichage du statut de connexion Google OAuth, bouton de déconnexion Google
+
+**Hors scope F07 :** Mode hors ligne, PWA, notifications push, thème sombre
+
+---
+
+## 3. Exigences non fonctionnelles
+
+### Sécurité
+
+- ENF01 — Authentification par cookie httpOnly, SameSite=Strict, Secure
+- ENF02 — Toutes les routes `/api/*` (sauf `/api/auth/login`) protégées par middleware de vérification de session
+- ENF03 — Les tokens OAuth Google sont stockés côté serveur dans un champ chiffré
+- ENF04 — HTTPS obligatoire (Let's Encrypt + Certbot)
+- ENF05 — Les fichiers justificatifs uploadés sont stockés hors webroot, non accessibles directement par URL
+
+### Performance
+
+- ENF06 — L'OCR d'un justificatif (image standard) doit retourner un résultat en moins de 5 secondes
+- ENF07 — Le scan Gmail (30 jours) doit se compléter en moins de 30 secondes
+
+### Disponibilité
+
+- ENF08 — L'application est accessible 24h/24 via VPS (PM2 + Nginx)
+- ENF09 — Les données sont sauvegardées quotidiennement (backup SQLite)
+
+---
+
+## 4. Hors scope MVP (strict)
+
+| Fonctionnalité | Version cible |
 |---|---|
-| Statut juridique | SARL |
-| Régime TVA | Assujetti, collecteur TVA 20% |
-| Raison sociale | TNS Consulting |
-| Mode de facturation | 1 facture par mois, en fin de mois |
-| Base de calcul | TJM × nombre de jours effectués |
-| Nombre de clients simultanés | 1 client actif par mission |
-| Volume notes de frais | 10 à 40 tickets par mois |
-| Type de reçus | Papier (majoritaire) et dématérialisés |
-| Support d'utilisation | Laptop (usage principal) |
-| Authentification | Compte Google uniquement (OAuth) |
+| Factur-X (facturation électronique) | V1 (sem. 11–20) |
+| Export CSV / Excel des dépenses | V1 |
+| Rapport TVA mensuel | V1 |
+| Rapprochement bancaire automatisé | V1 |
+| Alertes (facture en retard, TVA) | V1 |
+| Scan Gmail automatique périodique | V2 |
+| Tableau de bord de pilotage (TJM, projection) | V2 |
+| Multi-utilisateurs | Décision reportée (CR obligatoire) |
+| Mobile natif iOS/Android | Hors scope global |
+| Logiciel comptable certifié / FEC | Hors scope global |
+| Paiement en ligne (Stripe) | Hors scope global |
 
 ---
 
-## 2. Périmètre MVP
+## 5. Critères de recette MVP
 
-### 2.1 Fonctionnalités incluses — les 5 modules
-
-| # | Module | Intitulé |
+| # | Critère | Comment vérifier |
 |---|---|---|
-| F01 | Notes de frais | Saisie manuelle d'une dépense |
-| F02 | Facturation | Création d'une facture |
-| F03 | Facturation | Suivi des statuts de facture |
-| F04 | Trésorerie | Vue mensuelle entrées / sorties / solde |
-| F05 | Interface | Application web responsive, authentification Google |
-
-### 2.2 Hors scope MVP (et global)
-
-- OCR et reconnaissance automatique de reçus (→ V1)
-- Workflow devis → bon de commande → facture (→ V1)
-- Relances automatiques (→ V1)
-- Exports CSV / PDF pour expert-comptable (→ V1)
-- Tableau de bord annuel et KPIs (→ V1)
-- Prévisionnel de trésorerie (→ V1)
-- Intégrations Gmail / Google Drive (→ V3)
-- Application mobile native iOS / Android
-- Multi-utilisateurs / multi-entreprises
-- Logiciel comptable certifié
-- CRM / gestion de prospects
-- Paiement en ligne (Stripe, GoCardless)
-- Connexion bancaire directe (open banking)
+| CR01 | Login / logout fonctionnel | Se connecter, naviguer, se déconnecter |
+| CR02 | OCR photo smartphone extrait montant + date | Prendre en photo un ticket, vérifier le formulaire pré-rempli |
+| CR03 | OCR upload desktop fonctionne sur PDF et image | Uploader une facture PDF, vérifier l'extraction |
+| CR04 | Dépense enregistrée après validation manuelle | Vérifier présence dans la liste avec justificatif |
+| CR05 | Facture PDF générée avec mentions légales complètes | Créer une facture, télécharger le PDF, vérifier le contenu |
+| CR06 | Passage automatique en statut "En retard" | Créer une facture avec échéance passée, vérifier le statut |
+| CR07 | Import Gmail : factures détectées et importables | Connecter OAuth, scanner, sélectionner, importer |
+| CR08 | Import Drive : relevé bancaire extrait et validable | Naviguer Drive, sélectionner relevé, valider les transactions |
+| CR09 | Vue trésorerie mensuelle correcte | Vérifier cohérence entrées/sorties avec les données saisies |
+| CR10 | Zéro erreur console Chrome | Naviguer toutes les pages, inspecter la console |
+| CR11 | Interface utilisable sur smartphone | Tester toutes les fonctions sur mobile Chrome |
 
 ---
 
-## 3. Exigences fonctionnelles détaillées
+## 6. Références
 
-### F01 — Notes de frais : saisie manuelle
-
-**Description :** L'utilisateur saisit manuellement une dépense professionnelle depuis un reçu papier ou dématérialisé.
-
-**Champs obligatoires :**
-
-| Champ | Type | Règle |
-|---|---|---|
-| Date | Date | Obligatoire — format JJ/MM/AAAA |
-| Fournisseur | Texte | Obligatoire — 100 caractères max |
-| Montant TTC | Nombre décimal | Obligatoire — positif, 2 décimales |
-| Taux de TVA | Liste | Obligatoire — valeurs : 20%, 10%, 5,5%, 0% |
-| Catégorie | Liste | Obligatoire — voir liste ci-dessous |
-| Description | Texte | Optionnel — 250 caractères max |
-
-**Catégories de dépenses (MVP) :**
-- Transport / Déplacement
-- Repas / Restaurant
-- Matériel informatique
-- Logiciel / Abonnement
-- Hébergement
-- Télécom
-- Autre
-
-**Calculs automatiques :**
-- Montant HT = Montant TTC / (1 + taux TVA)
-- TVA déductible = Montant TTC − Montant HT
-
-**Actions disponibles :**
-- Ajouter une dépense
-- Modifier une dépense existante
-- Supprimer une dépense
-- Lister toutes les dépenses (ordre chronologique inverse)
-
-**Règles métier :**
-- Le montant HT et la TVA déductible sont calculés automatiquement, non saisissables
-- Une dépense supprimée est définitivement effacée (pas de corbeille MVP)
-- Pas de pièce jointe en MVP (scan de reçu → V1)
+- `recadrage_vision_solofin.md` — Vision et décisions de recadrage (v1.1, validé 24/05/2026)
+- `05_specs_techniques_mvp_v2.md` — Stack technique et architecture
+- `PMP_v2.md` — Planning et sprints
+- `HANDOFF_MOA_TO_DEV.md` — Brief Sprint 1 pour Claude développeur
 
 ---
 
-### F02 — Facturation : création d'une facture
-
-**Description :** L'utilisateur crée une facture mensuelle basée sur un TJM et un nombre de jours effectués.
-
-**Champs obligatoires :**
-
-| Champ | Type | Règle |
-|---|---|---|
-| Numéro de facture | Texte | Auto-généré — format `TNS_CONSULTING-AAAA-MM` |
-| Client | Liste | Obligatoire — sélection depuis carnet clients |
-| Mois de prestation | Mois/Année | Obligatoire |
-| Nombre de jours | Nombre décimal | Obligatoire — ex : 17,5 |
-| TJM (€ HT) | Nombre entier | Obligatoire — récupéré depuis la fiche client |
-| Taux de TVA | Liste | Obligatoire — défaut : 20% |
-| Date d'émission | Date | Obligatoire — défaut : date du jour |
-| Date d'échéance | Date | Obligatoire — défaut : J+30 |
-
-**Calculs automatiques :**
-- Montant HT = Nombre de jours × TJM
-- TVA = Montant HT × taux TVA
-- Montant TTC = Montant HT + TVA
-
-**Carnet clients — champs par fiche client :**
-
-| Champ | Type | Règle |
-|---|---|---|
-| Raison sociale | Texte | Obligatoire |
-| Adresse complète | Texte | Obligatoire (mention légale facture) |
-| SIRET | Texte | Optionnel |
-| TJM contractuel (€ HT) | Nombre | Obligatoire — pré-rempli à la création de facture |
-
-**Génération PDF :**
-- La facture générée doit contenir toutes les mentions légales obligatoires (voir section 5)
-- Format : PDF téléchargeable
-- Le PDF est généré à la demande, pas automatiquement
-
-**Actions disponibles :**
-- Créer une facture
-- Modifier une facture (statut Brouillon uniquement)
-- Supprimer une facture (statut Brouillon uniquement)
-- Générer le PDF
-- Ajouter / modifier / supprimer un client
-
-**Règles métier :**
-- Le numéro de facture est auto-généré et non modifiable
-- Une facture dont le statut est Envoyée, Payée ou En retard ne peut plus être modifiée ni supprimée
-- Le TJM est stocké dans la fiche client et pré-rempli à la création — modifiable manuellement si besoin
-
----
-
-### F03 — Facturation : suivi des statuts
-
-**Description :** L'utilisateur suit l'état de paiement de chaque facture.
-
-**Statuts disponibles :**
-
-| Statut | Description | Transition possible vers |
-|---|---|---|
-| Brouillon | Facture créée, non envoyée | Envoyée, Supprimée |
-| Envoyée | Facture transmise au client | Payée, En retard |
-| Payée | Règlement reçu | — (statut final) |
-| En retard | Date d'échéance dépassée, non payée | Payée |
-
-**Règles de transition :**
-- Brouillon → Envoyée : action manuelle de l'utilisateur
-- Envoyée → En retard : automatique si date d'échéance dépassée et statut = Envoyée
-- Tout statut → Payée : action manuelle de l'utilisateur
-- En retard → Payée : action manuelle de l'utilisateur
-
-**Affichage :**
-- Liste de toutes les factures avec statut visible en couleur
-- Filtrage par statut (Toutes / Brouillon / Envoyée / Payée / En retard)
-- Tri par date d'émission (ordre inverse par défaut)
-
-**Indicateurs calculés (visibles sur la liste) :**
-- Total facturé HT (hors Brouillons)
-- Total encaissé HT (statut Payée uniquement)
-- Total en attente HT (statut Envoyée + En retard)
-
----
-
-### F04 — Trésorerie : vue mensuelle
-
-**Description :** L'utilisateur consulte une synthèse financière mensuelle de son activité.
-
-**Contenu de la vue mensuelle :**
-
-| Ligne | Calcul | Source |
-|---|---|---|
-| Entrées HT | Somme des factures Payées du mois | Module Facturation |
-| Sorties TTC | Somme des dépenses du mois | Module Notes de frais |
-| Solde estimé | Entrées HT − Sorties TTC | Calculé |
-| TVA collectée | Somme TVA factures Payées du mois | Module Facturation |
-| TVA déductible | Somme TVA dépenses du mois | Module Notes de frais |
-| TVA nette estimée | TVA collectée − TVA déductible | Calculé |
-
-**Navigation temporelle :**
-- Sélecteur mois/année
-- Mois précédent / mois suivant
-- Mois en cours affiché par défaut
-- Accès aux mois passés depuis le démarrage de l'outil
-
-**Règles métier :**
-- Seules les factures au statut Payée alimentent les entrées du mois
-- Les factures Envoyées et En retard ne sont pas comptées dans les entrées (pas encore encaissées)
-- La TVA nette est une estimation indicative, non certifiée
-- Aucune projection future en MVP (→ V1)
-
----
-
-### F05 — Interface et authentification
-
-**Description :** L'application est accessible via navigateur web, sécurisée par authentification Google.
-
-**Authentification :**
-- Connexion via compte Google (OAuth 2.0)
-- Utilisateur unique — pas de gestion de rôles
-- Session persistante (rester connecté)
-- Déconnexion manuelle disponible
-
-**Interface :**
-- Application web responsive — optimisée laptop, fonctionnelle sur tablette
-- Navigation principale : Notes de frais / Facturation / Trésorerie
-- Langue de l'interface : Français
-- Pas de mode sombre requis en MVP (→ V2)
-
-**Performances :**
-- Chargement initial < 3 secondes sur connexion standard
-- Pas d'exigence de disponibilité (usage personnel, hébergement local MVP)
-
----
-
-## 4. Exigences non fonctionnelles
-
-| Catégorie | Exigence | Priorité |
-|---|---|---|
-| Sécurité | Authentification OAuth Google obligatoire | Bloquante |
-| Données | Données stockées localement en MVP | Obligatoire |
-| Sauvegarde | Export manuel des données (JSON ou CSV) | Souhaitable MVP |
-| Navigateur | Compatible Chrome (dernier) | Obligatoire |
-| Langue | Interface et code en français | Obligatoire |
-| Accessibilité | Non requise en MVP | — |
-
----
-
-## 5. Mentions légales obligatoires sur les factures
-
-Conformément à la réglementation française, chaque facture générée doit obligatoirement comporter :
-
-- Numéro de facture (séquentiel, sans rupture)
-- Date d'émission
-- Raison sociale et adresse de l'émetteur (TNS Consulting)
-- SIRET de l'émetteur : 809 419 468 00016
-- Numéro TVA intracommunautaire : FR89 809419468
-- Raison sociale et adresse du client
-- Description de la prestation
-- Mois de prestation
-- Quantité (nombre de jours) et prix unitaire HT (TJM)
-- Montant HT
-- Taux et montant de TVA
-- Montant TTC
-- Date d'échéance de paiement
-- Conditions de pénalités de retard (mention obligatoire)
-- Mention « TVA acquittée sur les débits » ou « sur les encaissements » selon le régime
-
----
-
-## 6. Critères d'acceptance par fonctionnalité
-
-| Fonctionnalité | Critère d'acceptance |
-|---|---|
-| F01 — Saisie dépense | Je saisis une dépense en moins de 60 secondes, elle apparaît dans la liste et dans la trésorerie du mois |
-| F02 — Création facture | Je crée une facture mensuelle en moins de 2 minutes, le PDF généré est conforme aux mentions légales |
-| F03 — Suivi statuts | Je change le statut d'une facture en 1 clic, la trésorerie se met à jour immédiatement |
-| F04 — Trésorerie | J'accède à la vue du mois en cours en moins de 2 clics, les chiffres sont cohérents avec mes factures et dépenses |
-| F05 — Auth Google | Je me connecte avec mon compte Google, ma session est maintenue entre deux visites |
-
----
-
-## 7. Hors scope — rappel synthétique
-
-Toute demande portant sur les éléments ci-dessous doit faire l'objet d'une Change Request avant tout développement :
-
-- Scan / OCR de reçus
-- Devis et bons de commande
-- Relances automatiques
-- Exports comptables
-- Intégrations Google (Gmail, Drive)
-- Tableau de bord annuel
-- Prévisionnel
-- Multi-utilisateurs
-- Paiement en ligne
-- Open banking
-
----
-
-## 8. Questions ouvertes et décisions à prendre
-
-| # | Question | Impact | À décider avant |
-|---|---|---|---|
-| Q1 | Stack technique (frontend / backend / BDD) | Specs techniques (05) | Sprint 1 |
-| Q2 | Hébergement MVP : local uniquement ou Vercel ? | Specs techniques (05) | Sprint 1 |
-| Q3 | Gestion des pénalités de retard : mention fixe ou paramétrable ? | F02 | Sprint 2 |
-| Q4 | Export données MVP : oui ou non, quel format ? | F05 | Sprint 1 |
-
----
-
-*Document vivant — à mettre à jour à chaque fin de sprint si une décision modifie le périmètre.*
-*Prochaine étape : Spécifications techniques MVP (livrable 05)*
+*Document produit par l'Assistant MOA — Session du 24/05/2026*

@@ -36,5 +36,8 @@ Thumbs.db
 # Historique de conversations
 conversation_solofin.md
 
+# Pièces jointes uploadées par l'utilisateur
+solofin/uploads/
+
 # Fichiers hors projet
 SoloFin_note_de_cadrage_AgriStyle.pptx
