@@ -22,6 +22,29 @@ db.exec(`
     created_at  TEXT    DEFAULT (datetime('now'))
   );
 
+  -- Table sessions persistées en base (remplace la Map mémoire)
+  CREATE TABLE IF NOT EXISTS sessions (
+    id         TEXT    PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    email      TEXT    NOT NULL,
+    expires_at TEXT    NOT NULL,
+    created_at TEXT    DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  -- Table tokens OAuth Google (stockés côté serveur, jamais exposés frontend)
+  CREATE TABLE IF NOT EXISTS oauth_tokens (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL UNIQUE,
+    access_token  TEXT,
+    refresh_token TEXT,
+    scope         TEXT,
+    expires_at    TEXT,
+    created_at    TEXT    DEFAULT (datetime('now')),
+    updated_at    TEXT    DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   -- Table clients
   CREATE TABLE IF NOT EXISTS clients (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,29 +77,81 @@ db.exec(`
 
   -- Table depenses (notes de frais)
   CREATE TABLE IF NOT EXISTS depenses (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    date_depense   TEXT    NOT NULL,
+    fournisseur    TEXT    NOT NULL,
+    montant_ttc    REAL    NOT NULL,
+    taux_tva       REAL    NOT NULL,
+    montant_ht     REAL    NOT NULL,
+    tva_deductible REAL    NOT NULL,
+    categorie      TEXT    NOT NULL,
+    description    TEXT,
+    created_at     TEXT    DEFAULT (datetime('now'))
+  );
+
+  -- Table historique imports Gmail (évite les doublons par gmail_msg_id)
+  CREATE TABLE IF NOT EXISTS imports_gmail (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    date_depense  TEXT    NOT NULL,
-    fournisseur   TEXT    NOT NULL,
-    montant_ttc   REAL    NOT NULL,
-    taux_tva      REAL    NOT NULL,
-    montant_ht    REAL    NOT NULL,
-    tva_deductible REAL   NOT NULL,
-    categorie     TEXT    NOT NULL,
-    description   TEXT,
-    created_at    TEXT    DEFAULT (datetime('now'))
+    gmail_msg_id  TEXT    NOT NULL UNIQUE,
+    expediteur    TEXT,
+    sujet         TEXT,
+    date_email    TEXT,
+    montant_ttc   REAL,
+    fournisseur   TEXT,
+    date_facture  TEXT,
+    statut        TEXT    DEFAULT 'detecte'
+                  CHECK(statut IN ('detecte','importe','ignore')),
+    depense_id    INTEGER,
+    created_at    TEXT    DEFAULT (datetime('now')),
+    FOREIGN KEY (depense_id) REFERENCES depenses(id)
+  );
+
+  -- Table historique imports Google Drive
+  CREATE TABLE IF NOT EXISTS imports_drive (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    drive_file_id   TEXT    NOT NULL UNIQUE,
+    nom_fichier     TEXT,
+    type_document   TEXT    CHECK(type_document IN ('releve_bancaire','declaration_resultat','autre')),
+    statut          TEXT    DEFAULT 'en_attente'
+                    CHECK(statut IN ('en_attente','importe','erreur')),
+    nb_transactions INTEGER,
+    created_at      TEXT    DEFAULT (datetime('now'))
   );
 `);
 
-// Créer le compte admin au premier démarrage s'il n'existe pas
-function initAdminUser() {
-  const user = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@solofin.local');
-  if (!user) {
-    const hash = bcrypt.hashSync('solofin2026', 12);
-    db.prepare('INSERT INTO users (email, password) VALUES (?, ?)').run('admin@solofin.local', hash);
-    console.log('Compte admin créé : admin@solofin.local');
+// Migration V1 : ajout colonne piece_jointe si elle n'existe pas
+try {
+  db.exec('ALTER TABLE depenses ADD COLUMN piece_jointe TEXT');
+} catch {}
+
+// Initialisation / migration du compte utilisateur
+function initUser() {
+  // Credentials lus depuis .env — jamais hardcodés dans le code source
+  const emailCible = process.env.ADMIN_EMAIL;
+  const motDePasse = process.env.ADMIN_PASSWORD;
+
+  if (!emailCible || !motDePasse) {
+    console.warn('⚠️  ADMIN_EMAIL ou ADMIN_PASSWORD manquant dans .env — compte utilisateur non initialisé');
+    return;
+  }
+
+  // Compte cible déjà présent — rien à faire
+  if (db.prepare('SELECT id FROM users WHERE email = ?').get(emailCible)) return;
+
+  const hash = bcrypt.hashSync(motDePasse, 12);
+  const ancienAdmin = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@solofin.local');
+
+  if (ancienAdmin) {
+    // Migration : renommer l'ancien compte + nouveau mot de passe
+    db.prepare('UPDATE users SET email = ?, password = ? WHERE id = ?')
+      .run(emailCible, hash, ancienAdmin.id);
+    console.log(`Compte migré : admin@solofin.local → ${emailCible}`);
+  } else {
+    db.prepare('INSERT INTO users (email, password) VALUES (?, ?)').run(emailCible, hash);
+    console.log(`Compte créé : ${emailCible}`);
   }
 }
 
-initAdminUser();
+initUser();
 
 module.exports = db;
