@@ -4,13 +4,27 @@ Derniere mise a jour : 26 Mai 2026
 
 ## Etat general
 
-Phase : MVP v2.0 — En cours (10 sprints)
-Sprint en cours : Sprint 10 — Recette complète + mise en production
-Dernier sprint livré : Sprint 9 — Trésorerie + Dashboard ✅
+Phase : MVP v2.0 — Recette terminée ✅ — En attente de mise en production
+Sprint en cours : Sprint 10 — Mise en production VPS
+Dernier sprint livré : Sprint 10 (recette) — 11/11 critères validés ✅
 
-## ⚡ Reprise prochaine session — Sprint 10 : Recette + Production
+## ⚡ Reprise prochaine session — Mise en production VPS
 
-**Objectif immédiat :** recette complète (11 critères), corrections bugs, mise en production VPS.
+**Objectif immédiat :** déployer sur VPS Ubuntu 22.04 (Nginx + PM2 + Let's Encrypt HTTPS).
+
+**Stack de déploiement :**
+- Process manager : PM2
+- Reverse proxy : Nginx
+- HTTPS : Let's Encrypt + Certbot
+- Hébergement : VPS Ubuntu 22.04 LTS
+
+**Recette MVP — 11/11 critères validés :**
+CR01 Login/logout ✅ | CR02 OCR photo ✅ | CR03 OCR desktop ✅ | CR04 Dépense ✅
+CR05 Facture PDF ✅ | CR06 En retard auto ✅ | CR07 Gmail ✅ | CR08 Drive ✅
+CR09 Trésorerie ✅ | CR10 Zéro erreur console ✅ | CR11 Mobile ✅
+
+**Corrections apportées ce sprint :**
+- UX frais : bouton "📷 Photo" + "📁 Fichier" visibles sur desktop ET mobile (avant : input nu sur desktop)
 
 **Commande pour relancer le backend :**
 ```
