@@ -9,6 +9,7 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
+    host: true, // Écoute sur toutes les interfaces réseau (accès depuis smartphone)
     // Proxy les appels /api vers le backend Express (port 3001)
     proxy: {
       '/api':     'http://localhost:3001',

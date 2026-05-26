@@ -1,15 +1,24 @@
 // Service OCR — extraction de champs depuis une image via Claude Vision API
 const Anthropic = require('@anthropic-ai/sdk');
 
-const PROMPT_OCR = `Analyse cette image de justificatif financier et extrais les informations suivantes en JSON :
+const PROMPT_OCR = `Tu es un assistant expert en lecture de justificatifs financiers français (tickets de caisse, factures, reçus).
+
+Analyse attentivement cette image et extrais ces informations en JSON :
 {
   "montant_ttc": number ou null,
   "date": "YYYY-MM-DD" ou null,
   "fournisseur": "string" ou null,
   "categorie_suggeree": "Abonnement|Matériel|Déplacement|Restaurant|Hébergement|Télécom|Formation|Divers" ou null
 }
-Réponds uniquement avec le JSON valide, sans texte supplémentaire ni balises markdown.
-Si tu n'es pas certain d'une valeur, mets null plutôt que d'inventer.`;
+
+Règles d'extraction :
+- montant_ttc : cherche "TOTAL", "TOTAL TTC", "MONTANT TTC", "NET À PAYER", "SOLDE", "TOTAL DÛ". Sur un ticket de caisse, c'est souvent le plus grand montant en bas du ticket. Ne prends PAS un sous-total ou un montant partiel.
+- date : cherche la date d'achat/émission. Formats courants : JJ/MM/AAAA, JJ-MM-AAAA, JJ.MM.AAAA. Sur un ticket de caisse elle est souvent en haut ou en bas.
+- fournisseur : le nom du magasin ou de l'enseigne (ex: "Carrefour", "Lidl", "SNCF", "Orange"). Prends le nom court, pas l'adresse.
+- categorie_suggeree : déduis-la depuis le nom du fournisseur ou le contenu.
+
+Réponds UNIQUEMENT avec le JSON valide, sans texte supplémentaire ni balises markdown.
+Si une valeur est illisible ou absente, mets null.`;
 
 // Appelle Claude Vision sur un buffer image (JPEG ou PNG)
 async function extraireDepuisImage(buffer, mimetype) {
@@ -20,7 +29,7 @@ async function extraireDepuisImage(buffer, mimetype) {
 
   const reponse = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 300,
+    max_tokens: 500,
     messages: [{
       role: 'user',
       content: [

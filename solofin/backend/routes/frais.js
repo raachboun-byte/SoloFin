@@ -110,21 +110,28 @@ router.delete('/:id', (req, res) => {
 
 // POST /api/depenses/ocr — extraction unifiée : image → Claude Vision, PDF → regex
 // Doit être défini AVANT les routes /:id pour ne pas être capturé par elles
+
+// Formats image supportés par Claude Vision
+const MIMETYPES_IMAGE = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+
 const uploadOCR = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    cb(null, ['image/jpeg', 'image/png', 'application/pdf'].includes(file.mimetype));
+    const ok = [...MIMETYPES_IMAGE, 'application/pdf'].includes(file.mimetype);
+    cb(null, ok);
   },
 });
 
 router.post('/ocr', uploadOCR.single('file'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ data: null, error: 'Fichier requis (JPG, PNG ou PDF — 10 Mo max)' });
+  if (!req.file) return res.status(400).json({ data: null, error: 'Fichier requis (JPG, PNG, WebP ou PDF — 10 Mo max)' });
 
   try {
     // Images : Claude Vision API
-    if (req.file.mimetype === 'image/jpeg' || req.file.mimetype === 'image/png') {
-      const champs = await extraireDepuisImage(req.file.buffer, req.file.mimetype);
+    if (MIMETYPES_IMAGE.includes(req.file.mimetype)) {
+      // Normalise image/jpg → image/jpeg pour l'API Claude
+      const mimeType = req.file.mimetype === 'image/jpg' ? 'image/jpeg' : req.file.mimetype;
+      const champs = await extraireDepuisImage(req.file.buffer, mimeType);
       return res.json({ data: champs, error: null });
     }
 
