@@ -417,33 +417,20 @@ function ModalDepense({ init, isDesktop = false, onClose, onSave }) {
             {/* Input fichier */}
             {!recuExistant && (
               <>
-                {/* Mobile : deux boutons séparés — caméra directe OU galerie/PDF */}
-                {!isDesktop ? (
-                  <div style={{ display:'flex', gap:8 }}>
-                    <label style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px 12px', background:'var(--navy)', color:'#fff', borderRadius:8, fontSize:'.82rem', fontWeight:700, cursor:'pointer', textAlign:'center' }}>
-                      📷 Photo
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        style={{ display:'none' }}
-                        onChange={e => handleFichierChange(e.target.files[0] || null)}
-                      />
-                    </label>
-                    <label style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px 12px', background:'#f0f2f5', color:'var(--navy)', borderRadius:8, fontSize:'.82rem', fontWeight:700, cursor:'pointer', textAlign:'center' }}>
-                      📁 Fichier
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,application/pdf"
-                        style={{ display:'none' }}
-                        onChange={e => handleFichierChange(e.target.files[0] || null)}
-                      />
-                    </label>
-                  </div>
-                ) : (
-                  /* Desktop : bouton explicite comme sur mobile */
-                  <label style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'10px 16px', background:'var(--navy)', color:'#fff', borderRadius:8, fontSize:'.85rem', fontWeight:700, cursor:'pointer' }}>
-                    📷 Scanner un reçu (JPG, PNG ou PDF)
+                {/* Deux boutons : Photo (caméra sur mobile, images sur desktop) et Fichier (PDF/image) */}
+                <div style={{ display:'flex', gap:8 }}>
+                  <label style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px 12px', background:'var(--navy)', color:'#fff', borderRadius:8, fontSize:'.82rem', fontWeight:700, cursor:'pointer', textAlign:'center' }}>
+                    📷 Photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      {...(isDesktop ? {} : { capture: 'environment' })}
+                      style={{ display:'none' }}
+                      onChange={e => handleFichierChange(e.target.files[0] || null)}
+                    />
+                  </label>
+                  <label style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px 12px', background:'#f0f2f5', color:'var(--navy)', borderRadius:8, fontSize:'.82rem', fontWeight:700, cursor:'pointer', textAlign:'center' }}>
+                    📁 Fichier
                     <input
                       type="file"
                       accept="image/jpeg,image/png,application/pdf"
@@ -451,7 +438,7 @@ function ModalDepense({ init, isDesktop = false, onClose, onSave }) {
                       onChange={e => handleFichierChange(e.target.files[0] || null)}
                     />
                   </label>
-                )}
+                </div>
                 {fichier && (
                   <div style={{ fontSize:'.72rem', color:'var(--mu)', marginTop:4 }}>
                     {fichier.name}{init?.piece_jointe ? ' — remplace le reçu existant' : ''}
