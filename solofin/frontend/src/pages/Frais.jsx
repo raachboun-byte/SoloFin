@@ -441,13 +441,16 @@ function ModalDepense({ init, isDesktop = false, onClose, onSave }) {
                     </label>
                   </div>
                 ) : (
-                  /* Desktop : input fichier standard */
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,application/pdf"
-                    style={{ ...FI, padding:'7px 12px', cursor:'pointer' }}
-                    onChange={e => handleFichierChange(e.target.files[0] || null)}
-                  />
+                  /* Desktop : bouton explicite comme sur mobile */
+                  <label style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'10px 16px', background:'var(--navy)', color:'#fff', borderRadius:8, fontSize:'.85rem', fontWeight:700, cursor:'pointer' }}>
+                    📷 Scanner un reçu (JPG, PNG ou PDF)
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,application/pdf"
+                      style={{ display:'none' }}
+                      onChange={e => handleFichierChange(e.target.files[0] || null)}
+                    />
+                  </label>
                 )}
                 {fichier && (
                   <div style={{ fontSize:'.72rem', color:'var(--mu)', marginTop:4 }}>
