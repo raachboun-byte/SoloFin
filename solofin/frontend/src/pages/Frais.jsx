@@ -424,7 +424,7 @@ function ModalDepense({ init, isDesktop = false, onClose, onSave }) {
                     <input
                       type="file"
                       accept="image/*"
-                      {...(isDesktop ? {} : { capture: 'environment' })}
+                      capture="environment"
                       style={{ display:'none' }}
                       onChange={e => handleFichierChange(e.target.files[0] || null)}
                     />
