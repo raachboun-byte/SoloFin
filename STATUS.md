@@ -1,37 +1,47 @@
 # STATUS.md - SoloFin
 
-Derniere mise a jour : 26 Mai 2026
+Derniere mise a jour : 27 Mai 2026
 
 ## Etat general
 
-Phase : MVP v2.0 — Recette terminée ✅ — En attente de mise en production
-Sprint en cours : Sprint 10 — Mise en production VPS
-Dernier sprint livré : Sprint 10 (recette) — 11/11 critères validés ✅
+Phase : V1 — Sprint Sécurité (S14-BIS) — BLOQUANT MISE EN PROD
+Sprint en cours : Sprint Sécurité (S14-BIS) — 36 vulnérabilités à corriger (audit 27/05/2026)
+Dernier sprint livré : Sprint 13 (Agent IA "Ask SoloFin") ✅
 
-## ⚡ Reprise prochaine session — Mise en production VPS
+## ⚡ Reprise prochaine session
 
-**Objectif immédiat :** déployer sur VPS Ubuntu 22.04 (Nginx + PM2 + Let's Encrypt HTTPS).
+**Objectif immédiat :** Sprint Sécurité — lire HANDOFF_MOA_TO_DEV.md intégralement avant de coder
 
-**Stack de déploiement :**
-- Process manager : PM2
-- Reverse proxy : Nginx
-- HTTPS : Let's Encrypt + Certbot
-- Hébergement : VPS Ubuntu 22.04 LTS
+**⚠️ ATTENTION :** Ce sprint est obligatoire avant toute mise en prod sur Internet.
+Rapport d'audit complet disponible (transmis par Rachid). 2 vulnérabilités critiques CVSS 9.6 et 9.1.
+
+**Lire avant de coder :** STATUS.md → HANDOFF_MOA_TO_DEV.md → CLAUDE.md
+
+## 🔐 Audit sécurité — État des corrections (27/05/2026)
+
+| Item | Description | Statut |
+|---|---|---|
+| VULN-020 | Credentials retirés de STATUS.md | ✅ Fait |
+| VULN-020 | Historique git purgé (git filter-repo --force) | ✅ Fait |
+| VULN-020 | Clé Anthropic révoquée et régénérée | ✅ Fait |
+| VULN-020 | Secret Google OAuth révoqué et régénéré | ✅ Fait |
+| VULN-020 | SESSION_SECRET régénéré | ✅ Fait |
+| VULN-020 | ENCRYPTION_KEY régénérée | ✅ Fait |
+| P0.1 à P0.14 | Phase 0 — correctifs pré-prod backend | ⏳ À faire (session dev) |
+| P0.5.1 à P0.5.4 | Phase 0.5 — hardening DoS | ⏳ À faire |
+| P1.1 à P1.9 | Phase 1 — hardening V1 | ⏳ À faire |
 
 **Recette MVP — 11/11 critères validés :**
 CR01 Login/logout ✅ | CR02 OCR photo ✅ | CR03 OCR desktop ✅ | CR04 Dépense ✅
 CR05 Facture PDF ✅ | CR06 En retard auto ✅ | CR07 Gmail ✅ | CR08 Drive ✅
 CR09 Trésorerie ✅ | CR10 Zéro erreur console ✅ | CR11 Mobile ✅
 
-**Corrections apportées ce sprint :**
-- UX frais : bouton "📷 Photo" + "📁 Fichier" visibles sur desktop ET mobile (avant : input nu sur desktop)
-
 **Commande pour relancer le backend :**
 ```
 Start-Process -FilePath "C:\Program Files\nodejs\node.exe" -ArgumentList "--env-file=.env", "index.js" -WorkingDirectory "C:\Users\Rachid\Documents\Claude\Projects\SoloFin\solofin\backend" -NoNewWindow
 ```
 
-**Identifiants SoloFin :** r.aachboun@gmail.com / voir ADMIN_PASSWORD dans .env
+**Identifiants SoloFin :** voir .env
 
 ## Decisions techniques actées ce sprint
 
@@ -49,7 +59,7 @@ Pour lancer l'app localement :
 - Backend  : depuis solofin/backend/  → node index.js  (port 3001)
 - Frontend : depuis solofin/frontend/ → npm run dev    (port 5173)
 - URL app  : http://localhost:5173
-- Identifiants : admin@solofin.local / solofin2026
+- Identifiants : voir .env
 
 ## Décisions techniques Sprint 3
 
@@ -190,7 +200,7 @@ Aucun blocage actif.
 - Frontend : React 18 + Vite + Tailwind CSS v4 + polices Lato / Source Sans 3
 - Backend : Node.js + Express port 3001
 - Base de données : SQLite via node:sqlite natif, tables créées (users, clients, factures, depenses)
-- Compte admin : admin@solofin.local / solofin2026
+- Compte admin : voir .env
 - Auth : login/logout/me, cookie httpOnly, middleware de session
 - Pages : Login (design navy/orange), Dashboard (topbar + drawer + nav basse)
 - Design aligné sur compta-independant.jsx (maquette de référence)
