@@ -3,12 +3,19 @@ const express = require('express');
 const router  = express.Router();
 const db      = require('../db/init');
 const { listerFichiers, telechargerFichier, getMetadataFichier, extraireTransactions } = require('../services/drive');
+const { journaliser, extraireIp } = require('../services/audit');
+const { validerIdGoogle } = require('../services/ssrf');
 const pdfParse = require('pdf-parse');
 
 // GET /api/drive/files?folder_id=xxx — lister les fichiers d'un dossier
 router.get('/files', async (req, res) => {
   const { folder_id = 'root' } = req.query;
   const userId = req.user.userId;
+
+  // P1.7 — Valider le format de l'ID Google (SSRF — VULN-024)
+  if (folder_id !== 'root' && !validerIdGoogle(folder_id)) {
+    return res.status(400).json({ data: null, error: 'folder_id invalide' });
+  }
 
   try {
     const fichiers = await listerFichiers(userId, folder_id);
@@ -23,6 +30,11 @@ router.get('/files', async (req, res) => {
 router.post('/parse', async (req, res) => {
   const { file_id, nom_fichier } = req.body;
   if (!file_id) return res.status(400).json({ data: null, error: 'file_id requis' });
+
+  // P1.7 — Valider le format de l'ID Google (SSRF — VULN-024)
+  if (!validerIdGoogle(file_id)) {
+    return res.status(400).json({ data: null, error: 'file_id invalide' });
+  }
 
   const userId = req.user.userId;
 
@@ -59,6 +71,11 @@ router.post('/import', (req, res) => {
   const { file_id, nom_fichier, type_document = 'releve_bancaire', transactions = [] } = req.body;
   if (!file_id) return res.status(400).json({ data: null, error: 'file_id requis' });
 
+  // P1.7 — Valider le format de l'ID Google (SSRF — VULN-024)
+  if (!validerIdGoogle(file_id)) {
+    return res.status(400).json({ data: null, error: 'file_id invalide' });
+  }
+
   // Déduplication : un fichier Drive ne peut être importé qu'une fois
   const existant = db.prepare('SELECT id FROM imports_drive WHERE drive_file_id = ?').get(file_id);
   if (existant) {
@@ -83,9 +100,9 @@ router.post('/import', (req, res) => {
       const tvaDeductible = ttc - ht;
 
       db.prepare(`
-        INSERT INTO depenses (date_depense, fournisseur, montant_ttc, taux_tva, montant_ht, tva_deductible, categorie, description)
-        VALUES (?, ?, ?, 20, ?, ?, 'Autre', ?)
-      `).run(t.date, t.libelle.slice(0, 100), ttc, ht, tvaDeductible, `Importé depuis Drive — ${nom_fichier || file_id}`);
+        INSERT INTO depenses (date_depense, fournisseur, montant_ttc, taux_tva, montant_ht, tva_deductible, categorie, description, user_id)
+        VALUES (?, ?, ?, 20, ?, ?, 'Divers', ?, ?)
+      `).run(t.date, t.libelle.slice(0, 100), ttc, ht, tvaDeductible, `Importé depuis Drive — ${nom_fichier || file_id}`, req.user.userId);
 
       importees.push({ libelle: t.libelle, montant: ttc });
     } catch (err) {
@@ -98,6 +115,9 @@ router.post('/import', (req, res) => {
     INSERT INTO imports_drive (drive_file_id, nom_fichier, type_document, statut, nb_transactions)
     VALUES (?, ?, ?, 'importe', ?)
   `).run(file_id, nom_fichier || file_id, type_document, importees.length);
+
+  // P1.9 — Journaliser l'import Drive
+  journaliser(req.user.userId, 'IMPORT_DRIVE', { file_id, nom_fichier, nb: importees.length }, extraireIp(req));
 
   res.json({ data: { importees, erreurs }, error: null });
 });

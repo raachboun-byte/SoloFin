@@ -3,20 +3,27 @@ const { google } = require('googleapis');
 const { creerClientAvecTokens } = require('./google');
 const db = require('../db/init');
 
-// Requête Gmail : emails avec pièces jointes PDF contenant des mots-clés de facturation
-const REQUETE_FACTURES = 'has:attachment filename:pdf (facture OR invoice OR receipt OR reçu OR confirmation)';
+// Requête Gmail : tous les emails avec pièce jointe (sans filtre type ni mots-clés)
+const REQUETE_FACTURES = 'has:attachment';
 
 // Créer le client Gmail authentifié pour l'utilisateur
-function creerClientGmail(userId) {
+async function creerClientGmail(userId) {
   const row = db.prepare('SELECT access_token, refresh_token FROM oauth_tokens WHERE user_id = ?').get(userId);
   if (!row) throw new Error('Compte Google non connecté — connectez-vous dans Paramètres');
-  const authClient = creerClientAvecTokens(row.access_token, row.refresh_token);
-  return google.gmail({ version: 'v1', auth: authClient });
+  try {
+    const authClient = await creerClientAvecTokens(row.access_token, row.refresh_token);
+    return google.gmail({ version: 'v1', auth: authClient });
+  } catch (err) {
+    if (err.code === 'TOKEN_REENCRYPT_REQUIRED') {
+      throw new Error('Compte Google non connecté — reconnexion requise (mise à jour de sécurité)');
+    }
+    throw err;
+  }
 }
 
 // Scanner les N derniers jours — retourne la liste des emails avec PDF détectés
 async function scannerEmails(userId, jours = 30) {
-  const gmail = creerClientGmail(userId);
+  const gmail = await creerClientGmail(userId);
 
   // Date limite en epoch secondes (format attendu par Gmail)
   const dateDepuis = new Date();
@@ -36,12 +43,12 @@ async function scannerEmails(userId, jours = 30) {
     // Statut déduplication depuis imports_gmail
     const existant = db.prepare('SELECT statut FROM imports_gmail WHERE gmail_msg_id = ?').get(msg.id);
 
-    // Récupérer seulement les métadonnées (rapide, pas le corps complet)
+    // format:'full' pour avoir payload.parts avec les attachmentIds
+    // (format:'metadata' ne retourne pas la structure des pièces jointes)
     const detail = await gmail.users.messages.get({
       userId: 'me',
       id: msg.id,
-      format: 'metadata',
-      metadataHeaders: ['Subject', 'From', 'Date'],
+      format: 'full',
     });
 
     const headers = detail.data.payload?.headers || [];
@@ -49,26 +56,32 @@ async function scannerEmails(userId, jours = 30) {
     const expediteur = headers.find(h => h.name === 'From')?.value    || '';
     const dateEmail  = headers.find(h => h.name === 'Date')?.value    || '';
 
-    // Filtrer les vraies pièces jointes PDF (avec attachmentId — exclut les PDF inline)
-    const parties    = detail.data.payload?.parts || [];
-    const pdfParts   = parties.filter(p =>
-      (p.mimeType === 'application/pdf' || (p.filename && p.filename.toLowerCase().endsWith('.pdf'))) &&
-      p.body?.attachmentId
-    );
+    // Extraire récursivement toutes les parties d'un message (gère multipart imbriqués)
+    function extraireParties(part) {
+      if (!part) return [];
+      const acc = [part];
+      if (part.parts) part.parts.forEach(p => acc.push(...extraireParties(p)));
+      return acc;
+    }
 
-    // Ignorer les emails sans PDF réel en pièce jointe
-    if (pdfParts.length === 0) continue;
+    // Toutes les vraies pièces jointes (avec attachmentId — exclut inline images et texte)
+    const toutesParties = extraireParties(detail.data.payload);
+    const pjParts = toutesParties.filter(p => p.body?.attachmentId && p.filename);
+
+    // Ignorer les emails sans pièce jointe réelle
+    if (pjParts.length === 0) continue;
 
     resultats.push({
       gmail_msg_id: msg.id,
       sujet,
       expediteur,
-      date_email:   dateEmail,
-      nb_pdf:       pdfParts.length,
-      statut:       existant?.statut || 'detecte',
-      pieces_jointes: pdfParts.map(p => ({
+      date_email:     dateEmail,
+      nb_pj:          pjParts.length,
+      statut:         existant?.statut || 'detecte',
+      pieces_jointes: pjParts.map(p => ({
         attachmentId: p.body.attachmentId,
-        filename:     p.filename || 'facture.pdf',
+        filename:     p.filename,
+        mimeType:     p.mimeType || 'application/octet-stream',
       })),
     });
   }
@@ -78,7 +91,7 @@ async function scannerEmails(userId, jours = 30) {
 
 // Télécharger une pièce jointe Gmail et retourner un Buffer
 async function telechargerPieceJointe(userId, msgId, attachmentId) {
-  const gmail      = creerClientGmail(userId);
+  const gmail      = await creerClientGmail(userId);
   const reponse    = await gmail.users.messages.attachments.get({
     userId: 'me',
     messageId: msgId,

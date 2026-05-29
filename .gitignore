@@ -21,6 +21,17 @@ frontend/build/
 # Logs
 *.log
 npm-debug.log*
+*_out.txt
+*_err.txt
+backend_*.txt
+frontend_*.txt
+b_s12b*.txt
+
+# Fichiers temporaires de debug/test
+cookies.txt
+login.json
+test_ticket.jpg
+generate_audit_report.js
 
 # OS
 .DS_Store

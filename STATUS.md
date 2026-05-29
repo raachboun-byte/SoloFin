@@ -1,21 +1,63 @@
 # STATUS.md - SoloFin
 
-Derniere mise a jour : 27 Mai 2026
+Derniere mise a jour : 29 Mai 2026
 
 ## Etat general
 
-Phase : V1 — Sprint Sécurité (S14-BIS) — BLOQUANT MISE EN PROD
-Sprint en cours : Sprint Sécurité (S14-BIS) — 36 vulnérabilités à corriger (audit 27/05/2026)
-Dernier sprint livré : Sprint 13 (Agent IA "Ask SoloFin") ✅
+Phase : V1 — Recette / tests pre-VPS
+Sprint en cours : Sprint 14 — Déploiement VPS (en attente : recette terminée + credentials Rachid)
+Dernier sprint livré : Sprint S15 ✅ — 10/10 items sécurité (28/05/2026)
 
 ## ⚡ Reprise prochaine session
 
-**Objectif immédiat :** Sprint Sécurité — lire HANDOFF_MOA_TO_DEV.md intégralement avant de coder
+**Objectif immédiat :** Finaliser recette mobile (OCR photo smartphone) + déploiement VPS
+**État OCR :** Fix appliqué (dotenv override:true) — TEST EN COURS sur smartphone (à valider au démarrage)
 
-**⚠️ ATTENTION :** Ce sprint est obligatoire avant toute mise en prod sur Internet.
-Rapport d'audit complet disponible (transmis par Rachid). 2 vulnérabilités critiques CVSS 9.6 et 9.1.
+**Actions Rachid avant prochaine session :**
+1. ✅ Tester OCR smartphone (photo ticket → champs pré-remplis ?)
+2. ⚠️ Rotation ANTHROPIC_API_KEY recommandée (clé partagée partiellement en chat)
+3. ⚠️ Rotation GOOGLE_CLIENT_SECRET (NV-003 S15 — pas encore fait)
+4. Fournir IP VPS + accès SSH pour Sprint 14
 
-**Lire avant de coder :** STATUS.md → HANDOFF_MOA_TO_DEV.md → CLAUDE.md
+**Pour démarrer les serveurs :**
+```
+Start-Process "C:\Program Files\nodejs\node.exe" -ArgumentList "--env-file=.env","index.js" -WorkingDirectory "C:\Users\Rachid\Documents\Claude\Projects\SoloFin\solofin\backend" -NoNewWindow -RedirectStandardOutput "...\backend_out.txt" -RedirectStandardError "...\backend_err.txt"
+Start-Process "C:\Program Files\nodejs\node.exe" -ArgumentList "node_modules\vite\bin\vite.js" -WorkingDirectory "C:\Users\Rachid\Documents\Claude\Projects\SoloFin\solofin\frontend" -NoNewWindow
+```
+URL : http://localhost:5173 (desktop) | http://192.168.1.18:5173 (smartphone même WiFi)
+
+**⚠️ Action manuelle Rachid AVANT de coder (NV-003) :**
+1. Révoquer et régénérer `ANTHROPIC_API_KEY` sur console.anthropic.com
+2. Révoquer et régénérer `GOOGLE_CLIENT_SECRET` sur console.cloud.google.com
+3. Régénérer `SESSION_SECRET` : `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"`
+4. Régénérer `ENCRYPTION_KEY` de même (invalide les tokens OAuth en base — reconnexion Google requise)
+5. Mettre à jour `.env` avec les nouvelles valeurs
+
+**Prérequis Sprint 14 (déploiement VPS) :** Sprint S15 terminé + validé
+1. Adresse IP du VPS (ou nom de domaine)
+2. Accès SSH (user + clé ou mot de passe)
+3. Confirmation que Node.js v24 est dispo (ou à installer)
+4. URI de callback OAuth Google en production (si Gmail/Drive activés dès J1)
+
+## Ce qui a été livré — Sprint 14 Bis
+
+- Backend : tables `relances` + `relances_config` + colonne `email` sur `clients` (migration V3)
+- Backend : `routes/relances.js` branché — GET historique, PUT config, POST envoi manuel
+- Backend : `routes/alertes.js` branché — alertes TVA (acomptes + solde) et cotisations SSI
+- Backend : `routes/agent.js` branché — chat IA streaming SSE (claude-sonnet-4-6)
+- Backend : job relances automatiques au démarrage + toutes les heures (J+15/J+30/J+45)
+- Backend : `nodemailer` installé, service SMTP configuré via `.env`
+- Backend : `clients.js` — champ `email` ajouté (POST + PUT)
+- Frontend : page `Relances.jsx` — KPIs, filtres, historique des envois
+- Frontend : composant `AskSoloFin.jsx` — chat flottant IA avec streaming et suggestions
+- Frontend : nav "🔔 Relances" ajoutée (sidebar + drawer + nav basse)
+- Frontend : widget alertes fiscales dans PageAccueil (visible si urgence danger/warning)
+- Frontend : champ email dans le carnet clients (modal + affichage liste)
+- `.env.example` mis à jour avec variables SMTP
+
+**Score sécurité actuel : ~6.5–7.0 / 10 ASVS** (objectif atteint — mise en prod autorisée)
+
+**Lire avant de coder :** STATUS.md → CLAUDE.md → HANDOFF_MOA_TO_DEV.md
 
 ## 🔐 Audit sécurité — État des corrections (27/05/2026)
 
@@ -27,9 +69,32 @@ Rapport d'audit complet disponible (transmis par Rachid). 2 vulnérabilités cri
 | VULN-020 | Secret Google OAuth révoqué et régénéré | ✅ Fait |
 | VULN-020 | SESSION_SECRET régénéré | ✅ Fait |
 | VULN-020 | ENCRYPTION_KEY régénérée | ✅ Fait |
-| P0.1 à P0.14 | Phase 0 — correctifs pré-prod backend | ⏳ À faire (session dev) |
-| P0.5.1 à P0.5.4 | Phase 0.5 — hardening DoS | ⏳ À faire |
-| P1.1 à P1.9 | Phase 1 — hardening V1 | ⏳ À faire |
+| P0.1 | TTL session → 24h | ✅ Fait (27/05/2026) |
+| P0.2 | Rate limiting global 100 req/min + /login 5/15min | ✅ Fait (27/05/2026) |
+| P0.3 | Helmet.js | ✅ Déjà présent |
+| P0.4 | Cookie Secure en production | ✅ Déjà présent |
+| P0.5 | Validation MIME réel (magic bytes) | ✅ Déjà présent |
+| P0.7 | Renommage UUID uploads | ✅ Déjà présent |
+| P0.9 | Suppression endpoint debug | ✅ Absent du code |
+| P0.10 | CORS restreint à FRONTEND_URL | ✅ Déjà présent |
+| P0.11 | OAuth state HMAC-SHA256 (CVSS 9.6) | ✅ Fait (27/05/2026) |
+| P0.5.2 | Timeout 30s API externes (OCR) | ✅ Fait (27/05/2026) |
+| P0.5.3 | Rate limit OCR 3 req/min | ✅ Fait (27/05/2026) |
+| P0.5.4 | Body JSON max 100 Ko | ✅ Fait (27/05/2026) |
+| P0.14 | Vérification vars env au démarrage | ✅ Fait (27/05/2026) |
+| P1.1 | PBKDF2 600k itérations (CVSS 9.1) | ✅ Fait (27/05/2026) |
+| P1.2 | AES-CBC → AES-GCM (CVSS 9.1) | ✅ Fait (27/05/2026) |
+| P1.3 | Session ID → crypto.randomBytes(32) | ✅ Fait (27/05/2026) |
+| P1.4 | Invalider sessions actives au logout Google | ✅ Fait (27/05/2026) |
+| P1.8 | Erreurs 500 génériques en production | ✅ Fait (27/05/2026) |
+| P0.6 | Limite upload 10 Mo | ⚠️ Maintenu à 5 Mo (acceptable MVP) |
+| P0.8 | Validation Zod (POST/PUT dépenses) | ✅ Fait (28/05/2026) |
+| P0.12 | Logger Pino + pino-http | ✅ Fait (28/05/2026) |
+| P0.13 | secure-json-parse | ℹ️ Pas de JSON.parse() direct dans le code — Express gère nativement |
+| P1.5 | IDOR user_id sur dépenses (migration V2) | ✅ Fait (28/05/2026) |
+| P1.6 | SQLi — paramétrage systématique | ✅ Vérifié : toutes les requêtes utilisent des placeholders ? |
+| P1.7 | SSRF — filtrage ID Google (Drive/Gmail) | ✅ Fait (28/05/2026) |
+| P1.9 | Audit trail : login, logout, imports Gmail/Drive | ✅ Fait (28/05/2026) |
 
 **Recette MVP — 11/11 critères validés :**
 CR01 Login/logout ✅ | CR02 OCR photo ✅ | CR03 OCR desktop ✅ | CR04 Dépense ✅
@@ -185,7 +250,11 @@ Aucun blocage actif.
 | Sprint 7 | Import Gmail | ✅ Terminé |
 | Sprint 8 | Import Drive | ✅ Terminé |
 | Sprint 9 | Trésorerie + Dashboard | ✅ Terminé |
-| Sprint 10 | Recette + Production | 🔄 En cours |
+| Sprint 10 | Recette + Production | ✅ Terminé |
+| Sprint S14-BIS | Sécurité (23/23 corrections) | ✅ Terminé |
+| Sprint 14 Bis | Relances + Alertes + Agent IA | ✅ Terminé |
+| Sprint S15 | Sécurité post-contre-audit (10 items) | ✅ Terminé (28/05/2026) |
+| Sprint 14 | Déploiement VPS | 🟡 Prêt à démarrer |
 
 ## Ce qui a été livré - Sprint 2
 

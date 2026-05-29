@@ -1,7 +1,8 @@
 // Initialisation de la base de données SQLite (node:sqlite natif Node.js v22+)
 const { DatabaseSync } = require('node:sqlite');
-const path = require('path');
-const bcrypt = require('bcrypt');
+const path   = require('path');
+const bcrypt = require('bcryptjs');
+const logger = require('../services/logger');
 
 // Chemin vers le fichier de base de données
 const DB_PATH = path.join(__dirname, '../../database/solofin.db');
@@ -120,9 +121,54 @@ db.exec(`
 `);
 
 // Migration V1 : ajout colonne piece_jointe si elle n'existe pas
-try {
-  db.exec('ALTER TABLE depenses ADD COLUMN piece_jointe TEXT');
-} catch {}
+try { db.exec('ALTER TABLE depenses ADD COLUMN piece_jointe TEXT'); } catch {}
+
+// Migration V2 — P1.5 : IDOR — user_id sur les dépenses (défaut 1 = utilisateur MVP)
+try { db.exec('ALTER TABLE depenses ADD COLUMN user_id INTEGER DEFAULT 1'); } catch {}
+
+// Migration V3 : email sur les clients (requis pour les relances automatiques)
+try { db.exec('ALTER TABLE clients ADD COLUMN email TEXT'); } catch {}
+
+// Migration V4 — P2/S15 IDOR : user_id sur factures et clients (défaut 1 = utilisateur MVP)
+try { db.exec('ALTER TABLE factures ADD COLUMN user_id INTEGER DEFAULT 1'); } catch {}
+try { db.exec('ALTER TABLE clients  ADD COLUMN user_id INTEGER DEFAULT 1'); } catch {}
+
+// Tables relances (Sprint 14 Bis)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS relances (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    facture_id         INTEGER NOT NULL,
+    niveau             INTEGER NOT NULL CHECK(niveau IN (1, 2, 3)),
+    date_envoi         TEXT    NOT NULL,
+    email_destinataire TEXT,
+    sujet              TEXT,
+    corps              TEXT,
+    statut             TEXT    NOT NULL DEFAULT 'envoye'
+                       CHECK(statut IN ('envoye', 'erreur')),
+    erreur_message     TEXT,
+    created_at         TEXT    DEFAULT (datetime('now')),
+    FOREIGN KEY (facture_id) REFERENCES factures(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS relances_config (
+    facture_id         INTEGER PRIMARY KEY,
+    relances_actives   INTEGER NOT NULL DEFAULT 1,
+    updated_at         TEXT    DEFAULT (datetime('now')),
+    FOREIGN KEY (facture_id) REFERENCES factures(id) ON DELETE CASCADE
+  );
+`);
+
+// Table audit_log — P1.9 : traçabilité des actions sensibles
+db.exec(`
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER,
+    action      TEXT    NOT NULL,
+    details     TEXT,
+    ip_address  TEXT,
+    created_at  TEXT    DEFAULT (datetime('now'))
+  );
+`);
 
 // Initialisation / migration du compte utilisateur
 function initUser() {
@@ -131,7 +177,7 @@ function initUser() {
   const motDePasse = process.env.ADMIN_PASSWORD;
 
   if (!emailCible || !motDePasse) {
-    console.warn('⚠️  ADMIN_EMAIL ou ADMIN_PASSWORD manquant dans .env — compte utilisateur non initialisé');
+    logger.warn('ADMIN_EMAIL ou ADMIN_PASSWORD manquant dans .env — compte utilisateur non initialisé');
     return;
   }
 
@@ -145,10 +191,10 @@ function initUser() {
     // Migration : renommer l'ancien compte + nouveau mot de passe
     db.prepare('UPDATE users SET email = ?, password = ? WHERE id = ?')
       .run(emailCible, hash, ancienAdmin.id);
-    console.log(`Compte migré : admin@solofin.local → ${emailCible}`);
+    logger.info(`Compte migré : admin@solofin.local → ${emailCible}`);
   } else {
     db.prepare('INSERT INTO users (email, password) VALUES (?, ?)').run(emailCible, hash);
-    console.log(`Compte créé : ${emailCible}`);
+    logger.info(`Compte créé : ${emailCible}`);
   }
 }
 

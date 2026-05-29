@@ -3,7 +3,8 @@ const express  = require('express');
 const router   = express.Router();
 const db       = require('../db/init');
 const { scannerEmails, telechargerPieceJointe } = require('../services/gmail');
-const { extraireDepuisPDF } = require('../services/extraction-pdf');
+const { extraireDepuisPDF }   = require('../services/extraction-pdf');
+const { journaliser, extraireIp } = require('../services/audit');
 
 // POST /api/gmail/scan — scanner Gmail sur N jours
 router.post('/scan', async (req, res) => {
@@ -47,11 +48,13 @@ router.post('/import', async (req, res) => {
       let fournisseur = extraireNomExpéditeur(expediteur) || sujet.slice(0, 50);
       let categorie   = 'Divers';
 
-      // OCR regex sur la première pièce jointe PDF
-      if (pieces_jointes?.length > 0) {
-        const { attachmentId } = pieces_jointes[0];
+      // OCR regex sur la première pièce jointe PDF uniquement
+      const premierePj = pieces_jointes?.[0];
+      const estPdf = premierePj?.mimeType === 'application/pdf' ||
+                     premierePj?.filename?.toLowerCase().endsWith('.pdf');
+      if (premierePj && estPdf) {
         try {
-          const buffer = await telechargerPieceJointe(userId, gmail_msg_id, attachmentId);
+          const buffer = await telechargerPieceJointe(userId, gmail_msg_id, premierePj.attachmentId);
           const champs = await extraireDepuisPDF(buffer);
           dateDepense = champs.date_depense || null;
           montantTtc  = champs.montant_ttc  || null;
@@ -76,9 +79,9 @@ router.post('/import', async (req, res) => {
 
       // Créer la dépense
       const insDepense = db.prepare(`
-        INSERT INTO depenses (date_depense, fournisseur, montant_ttc, taux_tva, montant_ht, tva_deductible, categorie, description)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(dateDepense, fournisseur, ttc, taux_tva, ht, tvaDeductible, categorie, `Importé depuis Gmail — ${sujet}`);
+        INSERT INTO depenses (date_depense, fournisseur, montant_ttc, taux_tva, montant_ht, tva_deductible, categorie, description, user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(dateDepense, fournisseur, ttc, taux_tva, ht, tvaDeductible, categorie, `Importé depuis Gmail — ${sujet}`, userId);
 
       const depenseId = insDepense.lastInsertRowid;
 
@@ -99,6 +102,9 @@ router.post('/import', async (req, res) => {
       erreurs.push({ gmail_msg_id, message: err.message });
     }
   }
+
+  // P1.9 — Journaliser l'import Gmail
+  journaliser(req.user.userId, 'IMPORT_GMAIL', { nb: importes.length }, extraireIp(req));
 
   res.json({ data: { importes, erreurs }, error: null });
 });

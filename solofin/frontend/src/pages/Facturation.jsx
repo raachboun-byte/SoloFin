@@ -39,7 +39,7 @@ const FORM_FACTURE_VIDE = {
   taux_tva: 20, date_emission: today(), date_echeance: todayPlus30(),
 };
 
-const FORM_CLIENT_VIDE = { raison_sociale: '', adresse: '', siret: '', tjm: '' };
+const FORM_CLIENT_VIDE = { raison_sociale: '', adresse: '', siret: '', tjm: '', email: '' };
 
 // ── Composant : badge statut ────────────────────────────
 function BadgeStatut({ statut }) {
@@ -344,6 +344,10 @@ function ModalClient({ client, onSave, onClose }) {
               <input type="number" min="1" step="1" value={form.tjm} onChange={e => set('tjm', e.target.value)} required placeholder="750" style={inputStyle} />
             </div>
           </div>
+          <div>
+            <label style={labelStyle}>Email client (pour relances automatiques)</label>
+            <input type="email" value={form.email || ''} onChange={e => set('email', e.target.value)} maxLength={120} placeholder="comptabilite@client.fr" style={inputStyle} />
+          </div>
 
           {err && <div style={{ background: '#fef2f2', color: 'var(--re)', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', fontSize: '.82rem' }}>{err}</div>}
 
@@ -522,6 +526,7 @@ export default function Facturation({ isDesktop }) {
                     <div style={{ fontWeight: 700, fontSize: '.88rem', color: 'var(--navy)' }}>{c.raison_sociale}</div>
                     <div style={{ fontSize: '.76rem', color: 'var(--t2)', marginTop: 2 }}>
                       {c.siret ? `SIRET : ${c.siret} · ` : ''}TJM : {fmt(c.tjm)}/j
+                      {c.email && <span style={{ marginLeft: 6, color: 'var(--gr)' }}>· ✉ {c.email}</span>}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>

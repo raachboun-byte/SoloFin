@@ -2,7 +2,20 @@
 const express     = require('express');
 const db          = require('../db/init');
 const PDFDocument = require('pdfkit');
+const { z }       = require('zod');
 const router      = express.Router();
+
+// P3/S15 — Validation Zod : entrées POST/PUT facture
+const schemaFacture = z.object({
+  client_id:       z.number({ coerce: true }).int().positive(),
+  mois_prestation: z.string().regex(/^\d{4}-\d{2}$/),
+  nb_jours:        z.number({ coerce: true }).positive().max(365),
+  tjm:             z.number({ coerce: true }).positive().max(10000),
+  taux_tva:        z.number({ coerce: true }).min(0).max(100).optional(),
+  date_emission:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  date_echeance:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  description:     z.string().max(500).optional(),
+});
 
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
@@ -29,15 +42,17 @@ const SELECT_WITH_CLIENT = `
 
 // GET /api/factures
 router.get('/', (req, res) => {
+  const userId = req.user.userId;
   // Auto-passage en retard : factures envoyées dont l'échéance est dépassée
-  db.prepare(`UPDATE factures SET statut = 'en_retard' WHERE statut = 'envoyee' AND date_echeance < date('now')`).run();
-  const rows = db.prepare(SELECT_WITH_CLIENT + ' ORDER BY f.date_emission DESC').all();
+  db.prepare(`UPDATE factures SET statut = 'en_retard' WHERE statut = 'envoyee' AND date_echeance < date('now') AND user_id = ?`).run(userId);
+  const rows = db.prepare(SELECT_WITH_CLIENT + ' WHERE f.user_id = ? ORDER BY f.date_emission DESC').all(userId);
   res.json({ data: rows, error: null });
 });
 
 // PATCH /api/factures/:id/statut
 router.patch('/:id/statut', (req, res) => {
   const { statut } = req.body;
+  const userId = req.user.userId;
   const TRANSITIONS = {
     brouillon: ['envoyee'],
     envoyee:   ['payee', 'en_retard'],
@@ -45,7 +60,7 @@ router.patch('/:id/statut', (req, res) => {
     payee:     [],
   };
 
-  const facture = db.prepare('SELECT * FROM factures WHERE id = ?').get(req.params.id);
+  const facture = db.prepare('SELECT * FROM factures WHERE id = ? AND user_id = ?').get(req.params.id, userId);
   if (!facture) return res.status(404).json({ data: null, error: 'Facture introuvable' });
 
   const autorisees = TRANSITIONS[facture.statut] || [];
@@ -53,26 +68,30 @@ router.patch('/:id/statut', (req, res) => {
     return res.status(400).json({ data: null, error: `Transition "${facture.statut}" → "${statut}" non autorisée` });
   }
 
-  db.prepare('UPDATE factures SET statut = ? WHERE id = ?').run(statut, req.params.id);
-  const updated = db.prepare(SELECT_WITH_CLIENT + ' WHERE f.id = ?').get(req.params.id);
+  db.prepare('UPDATE factures SET statut = ? WHERE id = ? AND user_id = ?').run(statut, req.params.id, userId);
+  const updated = db.prepare(SELECT_WITH_CLIENT + ' WHERE f.id = ? AND f.user_id = ?').get(req.params.id, userId);
   res.json({ data: updated, error: null });
 });
 
 // GET /api/factures/:id
 router.get('/:id(\\d+)', (req, res) => {
-  const row = db.prepare(SELECT_WITH_CLIENT + ' WHERE f.id = ?').get(req.params.id);
+  const userId = req.user.userId;
+  const row = db.prepare(SELECT_WITH_CLIENT + ' WHERE f.id = ? AND f.user_id = ?').get(req.params.id, userId);
   if (!row) return res.status(404).json({ data: null, error: 'Facture introuvable' });
   res.json({ data: row, error: null });
 });
 
 // POST /api/factures
 router.post('/', (req, res) => {
-  const { client_id, mois_prestation, nb_jours, tjm, taux_tva = 20, date_emission, date_echeance } = req.body;
-  if (!client_id || !mois_prestation || !nb_jours || !tjm) {
-    return res.status(400).json({ data: null, error: 'Champs obligatoires manquants' });
+  const result = schemaFacture.safeParse(req.body);
+  if (!result.success) {
+    return res.status(400).json({ data: null, error: result.error.errors[0]?.message || 'Données invalides' });
   }
 
-  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(client_id);
+  const { client_id, mois_prestation, nb_jours, tjm, taux_tva = 20, date_emission, date_echeance } = result.data;
+  const userId = req.user.userId;
+
+  const client = db.prepare('SELECT id FROM clients WHERE id = ? AND user_id = ?').get(client_id, userId);
   if (!client) return res.status(404).json({ data: null, error: 'Client introuvable' });
 
   const numero = genNumero(mois_prestation);
@@ -94,17 +113,18 @@ router.post('/', (req, res) => {
 
   const r = db.prepare(`
     INSERT INTO factures
-      (numero, client_id, mois_prestation, nb_jours, tjm, taux_tva, montant_ht, montant_tva, montant_ttc, date_emission, date_echeance, statut)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'brouillon')
-  `).run(numero, client_id, mois_prestation, jours, tarif, tva / 100, ht, mTva, ttc, date_emission || today, echeance);
+      (numero, client_id, user_id, mois_prestation, nb_jours, tjm, taux_tva, montant_ht, montant_tva, montant_ttc, date_emission, date_echeance, statut)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'brouillon')
+  `).run(numero, client_id, userId, mois_prestation, jours, tarif, tva / 100, ht, mTva, ttc, date_emission || today, echeance);
 
-  const created = db.prepare(SELECT_WITH_CLIENT + ' WHERE f.id = ?').get(r.lastInsertRowid);
+  const created = db.prepare(SELECT_WITH_CLIENT + ' WHERE f.id = ? AND f.user_id = ?').get(r.lastInsertRowid, userId);
   res.status(201).json({ data: created, error: null });
 });
 
 // PUT /api/factures/:id  (brouillon uniquement)
 router.put('/:id', (req, res) => {
-  const facture = db.prepare('SELECT * FROM factures WHERE id = ?').get(req.params.id);
+  const userId = req.user.userId;
+  const facture = db.prepare('SELECT * FROM factures WHERE id = ? AND user_id = ?').get(req.params.id, userId);
   if (!facture) return res.status(404).json({ data: null, error: 'Facture introuvable' });
   if (facture.statut !== 'brouillon') {
     return res.status(400).json({ data: null, error: 'Seules les factures en brouillon sont modifiables' });
@@ -132,33 +152,35 @@ router.put('/:id', (req, res) => {
       nb_jours = ?, tjm = ?, taux_tva = ?,
       montant_ht = ?, montant_tva = ?, montant_ttc = ?,
       date_emission = ?, date_echeance = ?
-    WHERE id = ?
+    WHERE id = ? AND user_id = ?
   `).run(
     client_id ?? facture.client_id, newMois, newNumero,
     jours, tarif, tva / 100, ht, mTva, ttc,
     date_emission || facture.date_emission,
     date_echeance || facture.date_echeance,
-    req.params.id
+    req.params.id, userId
   );
 
-  const updated = db.prepare(SELECT_WITH_CLIENT + ' WHERE f.id = ?').get(req.params.id);
+  const updated = db.prepare(SELECT_WITH_CLIENT + ' WHERE f.id = ? AND f.user_id = ?').get(req.params.id, userId);
   res.json({ data: updated, error: null });
 });
 
 // DELETE /api/factures/:id  (brouillon uniquement)
 router.delete('/:id', (req, res) => {
-  const facture = db.prepare('SELECT * FROM factures WHERE id = ?').get(req.params.id);
+  const userId = req.user.userId;
+  const facture = db.prepare('SELECT * FROM factures WHERE id = ? AND user_id = ?').get(req.params.id, userId);
   if (!facture) return res.status(404).json({ data: null, error: 'Facture introuvable' });
   if (facture.statut !== 'brouillon') {
     return res.status(400).json({ data: null, error: 'Seules les factures en brouillon sont supprimables' });
   }
-  db.prepare('DELETE FROM factures WHERE id = ?').run(req.params.id);
+  db.prepare('DELETE FROM factures WHERE id = ? AND user_id = ?').run(req.params.id, userId);
   res.json({ data: { deleted: true }, error: null });
 });
 
 // GET /api/factures/:id/pdf
 router.get('/:id/pdf', (req, res) => {
-  const f = db.prepare(SELECT_WITH_CLIENT + ' WHERE f.id = ?').get(req.params.id);
+  const userId = req.user.userId;
+  const f = db.prepare(SELECT_WITH_CLIENT + ' WHERE f.id = ? AND f.user_id = ?').get(req.params.id, userId);
   if (!f) return res.status(404).json({ data: null, error: 'Facture introuvable' });
 
   const doc = new PDFDocument({ size: 'A4', margin: 50 });

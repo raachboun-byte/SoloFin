@@ -223,7 +223,7 @@ export default function GmailImport({ isDesktop, onNav }) {
                     <div style={{ fontSize: '.73rem', color: 'var(--t2)', marginTop: 2, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{email.expediteur}</span>
                       <span style={{ color: 'var(--mu)' }}>·</span>
-                      <span>{email.nb_pdf} PDF</span>
+                      <span>{email.nb_pj ?? email.nb_pdf ?? 0} pièce{(email.nb_pj ?? email.nb_pdf ?? 0) > 1 ? 's' : ''} jointe{(email.nb_pj ?? email.nb_pdf ?? 0) > 1 ? 's' : ''}</span>
                     </div>
                   </div>
 

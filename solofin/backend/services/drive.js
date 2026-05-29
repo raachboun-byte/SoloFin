@@ -4,16 +4,23 @@ const { creerClientAvecTokens } = require('./google');
 const db = require('../db/init');
 
 // Créer le client Drive authentifié pour l'utilisateur
-function creerClientDrive(userId) {
+async function creerClientDrive(userId) {
   const row = db.prepare('SELECT access_token, refresh_token FROM oauth_tokens WHERE user_id = ?').get(userId);
   if (!row) throw new Error('Compte Google non connecté — connectez-vous dans Paramètres');
-  const authClient = creerClientAvecTokens(row.access_token, row.refresh_token);
-  return google.drive({ version: 'v3', auth: authClient });
+  try {
+    const authClient = await creerClientAvecTokens(row.access_token, row.refresh_token);
+    return google.drive({ version: 'v3', auth: authClient });
+  } catch (err) {
+    if (err.code === 'TOKEN_REENCRYPT_REQUIRED') {
+      throw new Error('Compte Google non connecté — reconnexion requise (mise à jour de sécurité)');
+    }
+    throw err;
+  }
 }
 
 // Lister les fichiers d'un dossier Drive (root par défaut)
 async function listerFichiers(userId, folderId = 'root') {
-  const drive = creerClientDrive(userId);
+  const drive = await creerClientDrive(userId);
   const reponse = await drive.files.list({
     q: `'${folderId}' in parents and trashed = false`,
     fields: 'files(id, name, mimeType, size, modifiedTime, parents)',
@@ -25,7 +32,7 @@ async function listerFichiers(userId, folderId = 'root') {
 
 // Récupérer les métadonnées d'un fichier (nom, type)
 async function getMetadataFichier(userId, fileId) {
-  const drive = creerClientDrive(userId);
+  const drive = await creerClientDrive(userId);
   const reponse = await drive.files.get({
     fileId,
     fields: 'id, name, mimeType, size, parents',
@@ -35,7 +42,7 @@ async function getMetadataFichier(userId, fileId) {
 
 // Télécharger un fichier Drive et retourner un Buffer
 async function telechargerFichier(userId, fileId) {
-  const drive = creerClientDrive(userId);
+  const drive = await creerClientDrive(userId);
   const reponse = await drive.files.get(
     { fileId, alt: 'media' },
     { responseType: 'arraybuffer' }

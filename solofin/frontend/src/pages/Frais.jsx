@@ -279,7 +279,8 @@ function ModalDepense({ init, isDesktop = false, onClose, onSave }) {
   });
   const [fichier, setFichier]             = useState(null);
   const [supprimerRecu, setSupprimerRecu] = useState(false);
-  const [extraction, setExtraction]       = useState(null); // null | 'en_cours' | 'ok' | 'vide'
+  const [extraction, setExtraction]       = useState(null); // null | 'en_cours' | 'ok' | 'vide' | 'heic' | {erreur: string}
+
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -287,13 +288,21 @@ function ModalDepense({ init, isDesktop = false, onClose, onSave }) {
     setFichier(f);
     setSupprimerRecu(false);
     setExtraction(null);
-    // OCR déclenché pour images et PDFs
-    const typesOCR = ['application/pdf', 'image/jpeg', 'image/png'];
-    if (!f || !typesOCR.includes(f.type)) return;
+    // OCR déclenché pour images (tous formats courants mobile/desktop) et PDFs
+    const typesOCR      = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    const typesNonSupp  = ['image/heic', 'image/heif'];
+    if (!f) return;
+    if (typesNonSupp.includes(f.type)) {
+      setExtraction('heic');
+      return;
+    }
+    // Fallback : si le type est inconnu mais que c'est une image, on tente quand même
+    if (!typesOCR.includes(f.type) && !f.type.startsWith('image/')) return;
     setExtraction('en_cours');
     try {
       const r = await ocrFichier(f);
-      if (r.error || !r.data) { setExtraction('vide'); return; }
+      if (r.error) { setExtraction({ erreur: r.error }); return; }
+      if (!r.data) { setExtraction('vide'); return; }
       const { date_depense, montant_ttc, fournisseur, categorie } = r.data;
       if (!date_depense && !montant_ttc && !fournisseur) { setExtraction('vide'); return; }
       setForm(p => ({
@@ -460,7 +469,17 @@ function ModalDepense({ init, isDesktop = false, onClose, onSave }) {
                 )}
                 {extraction === 'vide' && (
                   <div style={{ marginTop:6, padding:'7px 12px', background:'#fefce8', border:'1.5px solid #fde047', borderRadius:6, fontSize:'.78rem', color:'#713f12', display:'flex', alignItems:'center', gap:6 }}>
-                    ⚠ Aucune donnée extraite — saisissez les champs manuellement
+                    ⚠️ Aucune donnée extraite — saisissez les champs manuellement
+                  </div>
+                )}
+                {extraction === 'heic' && (
+                  <div style={{ marginTop:6, padding:'7px 12px', background:'#fef2f2', border:'1.5px solid #fecaca', borderRadius:6, fontSize:'.78rem', color:'#991b1b', display:'flex', alignItems:'center', gap:6 }}>
+                    ❌ Format HEIC non supporté — Réglages iPhone → Appareil photo → Formats → Compatibilité maximale (JPEG)
+                  </div>
+                )}
+                {extraction?.erreur && (
+                  <div style={{ marginTop:6, padding:'7px 12px', background:'#fef2f2', border:'1.5px solid #fecaca', borderRadius:6, fontSize:'.78rem', color:'#991b1b', display:'flex', alignItems:'center', gap:6 }}>
+                    ❌ {extraction.erreur}
                   </div>
                 )}
               </>

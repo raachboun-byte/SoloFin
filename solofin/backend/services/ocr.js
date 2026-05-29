@@ -25,7 +25,8 @@ async function extraireDepuisImage(buffer, mimetype) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY manquante dans .env');
 
-  const client = new Anthropic({ apiKey });
+  // P0.5.2 — Timeout 30s sur les appels API externes (VULN-019)
+  const client = new Anthropic({ apiKey, timeout: 30_000 });
 
   const reponse = await client.messages.create({
     model: 'claude-sonnet-4-6',

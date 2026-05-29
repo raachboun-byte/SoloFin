@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import { logout } from '../api/auth';
 import { listerFactures } from '../api/factures';
 import { listerDepenses } from '../api/frais';
+import { getAlertes } from '../api/alertes';
 import Frais from './Frais';
 import Facturation from './Facturation';
 import Tresorerie from './Tresorerie';
 import Parametres from './Parametres';
 import GmailImport from './GmailImport';
 import DriveImport from './DriveImport';
+import Relances from './Relances';
+import AskSoloFin from '../components/AskSoloFin';
 
 const SIDEBAR_W = 240;
 const TOPBAR_H  = 56;
@@ -18,6 +21,7 @@ const NAV = [
   { id: 'frais',       icon: '💸', label: 'Frais'       },
   { id: 'facturation', icon: '🧾', label: 'Factures'    },
   { id: 'tresorerie',  icon: '📊', label: 'Trésorerie'  },
+  { id: 'relances',    icon: '🔔', label: 'Relances'    },
   { id: 'gmail',       icon: '📧', label: 'Gmail'       },
   { id: 'drive',       icon: '📁', label: 'Drive'       },
   { id: 'parametres',  icon: '⚙️', label: 'Paramètres'  },
@@ -158,6 +162,7 @@ export default function Dashboard({ user, onLogout }) {
           {page === 'frais'       && <Frais isDesktop={isDesktop} />}
           {page === 'facturation' && <Facturation isDesktop={isDesktop} />}
           {page === 'tresorerie'  && <Tresorerie  isDesktop={isDesktop} />}
+          {page === 'relances'    && <Relances isDesktop={isDesktop} />}
           {page === 'gmail'       && <GmailImport isDesktop={isDesktop} onNav={setPage} />}
           {page === 'drive'       && <DriveImport isDesktop={isDesktop} />}
           {page === 'parametres'  && <Parametres />}
@@ -174,6 +179,9 @@ export default function Dashboard({ user, onLogout }) {
           ))}
         </nav>
       )}
+
+      {/* ── Ask SoloFin — bouton flottant IA ────────────── */}
+      <AskSoloFin />
     </div>
   );
 }
@@ -275,14 +283,16 @@ function BarChart({ barData, maxBar }) {
 function PageAccueil({ user, onNav, isDesktop }) {
   const [factures, setFactures] = useState([]);
   const [depenses, setDepenses] = useState([]);
+  const [alertes,  setAlertes]  = useState([]);
   const [loading,  setLoading]  = useState(true);
 
   useEffect(() => {
     async function charger() {
       try {
-        const [rf, rd] = await Promise.all([listerFactures(), listerDepenses()]);
+        const [rf, rd, ra] = await Promise.all([listerFactures(), listerDepenses(), getAlertes()]);
         setFactures(rf.data || []);
         setDepenses(rd.data || []);
+        setAlertes(ra.data?.alertes || []);
       } catch { /* silencieux */ }
       finally { setLoading(false); }
     }
@@ -353,6 +363,39 @@ function PageAccueil({ user, onNav, isDesktop }) {
             <strong>{enRetard.length} facture{enRetard.length > 1 ? 's' : ''} en retard</strong>
             {' · '}{fmt(enRetard.reduce((s, f) => s + f.montant_ht, 0))} à relancer
           </span>
+        </div>
+      )}
+
+      {/* Widget alertes fiscales (TVA + URSSAF — uniquement les urgentes) */}
+      {alertes.filter(a => a.urgence === 'danger' || a.urgence === 'warning').length > 0 && (
+        <div style={{ ...padH }}>
+          <div style={{ background: '#fff', border: '1px solid var(--bd)', borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: '1rem' }}>📅</span>
+              <span style={{ fontWeight: 700, fontSize: '.84rem', color: 'var(--navy)' }}>Échéances fiscales à venir</span>
+            </div>
+            {alertes.filter(a => a.urgence === 'danger' || a.urgence === 'warning').slice(0, 3).map((a, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', borderBottom: i < 2 ? '1px solid #f1f5f9' : 'none', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <span style={{
+                    display: 'inline-block', width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                    background: a.urgence === 'danger' ? '#dc2626' : '#f59e0b',
+                  }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '.81rem', fontWeight: 600, color: 'var(--t)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.label}</div>
+                    <div style={{ fontSize: '.7rem', color: 'var(--t2)' }}>
+                      {a.jours_restants === 0 ? "Aujourd'hui" : `J-${a.jours_restants}`} · {a.date_echeance}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: '.82rem', fontWeight: 700, color: a.urgence === 'danger' ? '#dc2626' : '#d97706' }}>
+                    ~{(a.montant_estime || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
